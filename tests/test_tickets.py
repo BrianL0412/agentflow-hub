@@ -36,6 +36,18 @@ DEP = """# 03 — Scheduler core
 - [ ] schedules waves
 """
 
+# Title containing digits — must not produce phantom blockers.
+DEP_NUMERIC_TITLE = """# 03 — Scheduler core
+
+**What to build:** Fix CVE-2024-1234 in the 2026 release.
+
+**Blocked by:** 01 — Fix CVE-2024-1234, 02 — 2026-Q1 item
+
+**Status:** ready-for-agent
+
+- [ ] schedules waves
+"""
+
 
 def test_load_single_ticket(tmp_path: Path):
     write_ticket(tmp_path, "01-ledger-storage.md", GOOD)
@@ -65,3 +77,11 @@ def test_malformed_missing_blocked_by(tmp_path: Path):
     write_ticket(tmp_path, "01-bad.md", "# 01 — Bad\n\nno fields here\n")
     with pytest.raises(TicketError, match="Blocked by"):
         load_tickets(tmp_path)
+
+
+def test_blocked_by_ignores_digits_in_titles(tmp_path: Path):
+    """Blocker titles may contain digits (CVE, dates); only leading ticket nums count."""
+    write_ticket(tmp_path, "03-scheduler-core.md", DEP_NUMERIC_TITLE)
+    write_ticket(tmp_path, "01-ledger-storage.md", GOOD)
+    by_num = {t.num: t for t in load_tickets(tmp_path)}
+    assert by_num["03"].blocked_by == ["01", "02"]  # not ["01","2024","1234","02","2026","1"]

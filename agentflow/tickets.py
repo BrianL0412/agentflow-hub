@@ -30,7 +30,16 @@ class Ticket:
 def _parse_nums(text: str) -> list[str]:
     if text.lower().startswith("none"):
         return []
-    return NUM_RE.findall(text)
+    # Split on the same separators to-tickets uses between entries, then keep
+    # only tokens whose leading run of digits is the whole token (a ticket num).
+    # This avoids grabbing digits inside human-readable blocker titles.
+    nums: list[str] = []
+    for part in re.split(r"[,;]|\s+—\s+", text):
+        part = part.strip()
+        m = re.match(r"^(\d+)$", part)
+        if m:
+            nums.append(m.group(1))
+    return nums
 
 
 def _parse_list(text: str) -> list[str]:

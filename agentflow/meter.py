@@ -19,11 +19,16 @@ def estimate_tokens(chars: int) -> int:
 
 
 def _baseline_chars(ticket: Ticket, deps: dict[str, set[str]], runs_dir: Path) -> int:
+    """Brief + ALL ancestors' full report raw text (naive paste-everything strategy).
+
+    Per spec line 61: every ancestor's report must be present. A missing report
+    (partial/crashed run) raises FileNotFoundError rather than silently counting
+    as zero — otherwise the baseline would be understated and the savings inflated.
+    """
     total = len(ticket.brief)
     for n in ancestors(deps, ticket.num):
         rp = report_path_for(runs_dir, n)
-        if rp.exists():
-            total += len(parse_report(rp).raw)
+        total += len(parse_report(rp).raw)  # raises FileNotFoundError if missing
     return total
 
 

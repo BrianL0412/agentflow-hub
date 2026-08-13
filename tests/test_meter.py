@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from agentflow.ledger import Ledger
 from agentflow.meter import build_comparison, estimate_tokens, write_comparison
 from agentflow.report import valid_report_text, report_path_for
@@ -26,3 +28,15 @@ def test_comparison_shows_savings(tmp_path: Path):
     assert "Baseline" in out and "Hub" in out and "Savings" in out
     p = write_comparison(tickets, deps, lg, tmp_path)
     assert p.name == "token-report.md" and p.exists()
+
+
+def test_baseline_raises_on_missing_ancestor_report(tmp_path: Path):
+    """Spec: baseline = brief + ALL ancestors' report full text. Missing report
+    (partial/crashed run) must raise, not silently count as zero chars."""
+    tickets = [mk("01"), mk("02", ["01"])]
+    deps = {"01": set(), "02": {"01"}}
+    lg = Ledger(tmp_path / "ledger.jsonl")
+    lg.append("02", "meter", {"kind": "dispatch", "chars": 150})
+    # NOTE: no report file written for ancestor 01
+    with pytest.raises(FileNotFoundError):
+        build_comparison(tickets, deps, lg, tmp_path)
