@@ -1,7 +1,12 @@
+from pathlib import Path
+
 import pytest
 
-from agentflow.graph import CycleError, assert_acyclic, build_deps, topo_order
-from agentflow.tickets import TicketError
+from agentflow.graph import (
+    CycleError, ancestors, apply_touch_conflicts, assert_acyclic,
+    build_deps, descendants, topo_order,
+)
+from agentflow.tickets import Ticket, TicketError
 
 
 def deps(**kw):
@@ -38,19 +43,13 @@ def test_diamond_is_acyclic():
 
 
 def test_unknown_blocker_rejected(tmp_path):
-    from agentflow.tickets import Ticket
-
     t = Ticket("01", "a", "A", ["99"], [], "brief", tmp_path / "01-a.md")
     with pytest.raises(TicketError, match="99"):
         build_deps([t])
 
 
-from agentflow.graph import ancestors, apply_touch_conflicts
-from agentflow.tickets import Ticket
-
-
 def mk(num: str, touches: list[str], blocked: list[str] | None = None) -> Ticket:
-    return Ticket(num, f"slug-{num}", f"T{num}", blocked or [], touches, "b", __import__("pathlib").Path(f"{num}.md"))
+    return Ticket(num, f"slug-{num}", f"T{num}", blocked or [], touches, "b", Path(f"{num}.md"))
 
 
 def test_overlapping_touches_become_serialized():
@@ -77,3 +76,9 @@ def test_ancestors_transitive():
     d = {"01": set(), "02": {"01"}, "03": {"01"}, "04": {"02", "03"}}
     assert ancestors(d, "04") == {"01", "02", "03"}
     assert ancestors(d, "01") == set()
+
+
+def test_descendants_transitive():
+    d = {"01": set(), "02": {"01"}, "03": {"01"}, "04": {"02", "03"}}
+    assert descendants(d, "01") == {"02", "03", "04"}
+    assert descendants(d, "04") == set()

@@ -72,6 +72,28 @@ def ancestors(deps: dict[str, set[str]], num: str) -> set[str]:
     return seen
 
 
+def descendants(deps: dict[str, set[str]], num: str) -> set[str]:
+    """All nodes that transitively depend on num — the reverse of ancestors."""
+    dependents: dict[str, set[str]] = {n: set() for n in deps}
+    for n, ds in deps.items():
+        for d in ds:
+            dependents[d].add(n)
+    seen: set[str] = set()
+    stack = list(dependents[num])
+    while stack:
+        n = stack.pop()
+        if n not in seen:
+            seen.add(n)
+            stack.extend(dependents[n])
+    return seen
+
+
+def build_deps_with_conflicts(tickets: list[Ticket]) -> dict[str, set[str]]:
+    """build_deps + apply_touch_conflicts in one call — the shape both the
+    scheduler and the CLI report need."""
+    return apply_touch_conflicts(tickets, build_deps(tickets))
+
+
 def _overlaps(a: list[str], b: list[str]) -> bool:
     for x in a:
         for y in b:

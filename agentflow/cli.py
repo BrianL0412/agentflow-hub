@@ -7,12 +7,14 @@ import shutil
 import sys
 from pathlib import Path
 
-from agentflow.graph import apply_touch_conflicts, build_deps
+from agentflow.graph import build_deps_with_conflicts
 from agentflow.ledger import Ledger
 from agentflow.meter import write_comparison
 from agentflow.runner import FakeRunner
 from agentflow.scheduler import Scheduler
 from agentflow.tickets import load_tickets
+
+ISSUES_SUBDIR = "issues"  # run copies issues here so `report` can reload tickets
 
 
 def _approve_prompt(ticket) -> bool:
@@ -24,9 +26,9 @@ def _cmd_run(args) -> int:
     repo = Path(args.repo)
     runs_dir = Path(args.runs_dir) if args.runs_dir else repo / ".agentflow" / "runs"
     runs_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(args.issues_dir, runs_dir / "issues", dirs_exist_ok=True)  # for `report` reload
+    shutil.copytree(args.issues_dir, runs_dir / ISSUES_SUBDIR, dirs_exist_ok=True)  # for `report` reload
     if args.agent_cmd:
-        from agentflow.subprocess_runner import SubprocessRunner  # Task 12
+        from agentflow.subprocess_runner import SubprocessRunner
 
         runner = SubprocessRunner(args.agent_cmd)
     else:
@@ -55,9 +57,8 @@ def _cmd_status(args) -> int:
 
 def _cmd_report(args) -> int:
     runs_dir = Path(args.runs_dir)
-    issues_dir = runs_dir / "issues"
-    tickets = load_tickets(issues_dir)
-    deps = apply_touch_conflicts(tickets, build_deps(tickets))
+    tickets = load_tickets(runs_dir / ISSUES_SUBDIR)
+    deps = build_deps_with_conflicts(tickets)
     path = write_comparison(tickets, deps, Ledger(runs_dir / "ledger.jsonl"), runs_dir)
     print(path.read_text(encoding="utf-8"))
     return 0
