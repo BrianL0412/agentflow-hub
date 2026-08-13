@@ -23,8 +23,9 @@ def init_git_repo(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-b", "main", str(path)], check=True, capture_output=True)
     (path / "README.md").write_text("# repo\n", encoding="utf-8")
-    git(path, "add", "README.md")
-    git(path, "-c", "user.email=hub@local", "-c", "user.name=hub", "commit", "-m", "init")
+    if git(path, "status", "--porcelain"):          # skip commit on re-init with clean tree
+        git(path, "add", "README.md")
+        git(path, "-c", "user.email=hub@local", "-c", "user.name=hub", "commit", "-m", "init")
     return path
 
 
