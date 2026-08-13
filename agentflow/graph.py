@@ -59,3 +59,39 @@ def topo_order(deps: dict[str, set[str]]) -> list[str]:
                     ready.append(m)
         ready.sort()
     return order
+
+
+def ancestors(deps: dict[str, set[str]], num: str) -> set[str]:
+    seen: set[str] = set()
+    stack = list(deps[num])
+    while stack:
+        n = stack.pop()
+        if n not in seen:
+            seen.add(n)
+            stack.extend(deps[n])
+    return seen
+
+
+def _overlaps(a: list[str], b: list[str]) -> bool:
+    for x in a:
+        for y in b:
+            if x == y or x.startswith(y.rstrip("/") + "/") or y.startswith(x.rstrip("/") + "/"):
+                return True
+    return False
+
+
+def apply_touch_conflicts(tickets: list[Ticket], deps: dict[str, set[str]]) -> dict[str, set[str]]:
+    out = {n: set(d) for n, d in deps.items()}
+    order = {n: i for i, n in enumerate(topo_order(deps))}
+    ts = {t.num: t.touches for t in tickets if t.touches}
+    nums = sorted(ts)
+    for i, a in enumerate(nums):
+        for b in nums[i + 1:]:
+            if not _overlaps(ts[a], ts[b]):
+                continue
+            if b in ancestors(out, a) or a in ancestors(out, b):
+                continue  # already ordered by a real edge
+            early, late = (a, b) if order[a] < order[b] else (b, a)
+            out[late].add(early)
+            assert_acyclic(out)
+    return out
