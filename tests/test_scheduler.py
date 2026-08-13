@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 
 from agentflow.ledger import (
@@ -73,3 +74,23 @@ def test_meter_events_written(tmp_path: Path):
     s.run()
     kinds = {(m["ticket"], m["kind"]) for m in lg.meters()}
     assert ("01", "dispatch") in kinds and ("01", "report") in kinds
+
+
+def test_ledger_single_writer_all_appends_on_main_thread(tmp_path: Path):
+    # Global Constraints: "Ledger ... single writer (the scheduler main thread)."
+    # A ThreadPoolExecutor worker must not append. We pin the main thread's ident
+    # and fail if any append lands on a different thread.
+    s, lg = build(tmp_path, FakeRunner())
+    main_ident = threading.current_thread().ident
+    writer_idents: list[int] = []
+    orig_append = s.ledger.append
+
+    def spy(ticket: str, type: str, payload: dict) -> None:
+        writer_idents.append(threading.current_thread().ident)
+        orig_append(ticket, type, payload)
+
+    s.ledger.append = spy
+    s.run()
+    assert writer_idents, "no ledger writes captured"
+    off_main = [tid for tid in writer_idents if tid != main_ident]
+    assert not off_main, f"ledger written off the main thread: {off_main}"

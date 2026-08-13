@@ -58,18 +58,17 @@ class Scheduler:
         self.ledger.append(num, "meter", {"kind": "dispatch", "chars": len(t.brief) + len(ctx.read_text(encoding="utf-8"))})
         return Dispatch(t, wt, brief, ctx, report_path_for(self.runs_dir, num))
 
-    def _run_agent(self, dispatch: Dispatch) -> bool:
-        """Worker thread: agent run + report validation only. No git, no merge."""
-        num = dispatch.ticket.num
+    def _run_agent(self, dispatch: Dispatch) -> tuple[bool, int]:
+        """Worker thread: agent run + report validation only. No git, no merge, no ledger
+        writes — the ledger is single-writer (main thread). Returns (ok, report_chars)."""
         result = self.runner.run(dispatch)
         if not result.ok:
-            return False
+            return (False, 0)
         try:
             rep = parse_report(dispatch.report_path)
         except ReportError:
-            return False
-        self.ledger.append(num, "meter", {"kind": "report", "chars": len(rep.raw)})
-        return True
+            return (False, 0)
+        return (True, len(rep.raw))
 
     def _settle(self, t: Ticket, dispatch: Dispatch) -> bool:
         """Main thread, topo order: approval gate -> merge -> done."""
@@ -109,12 +108,15 @@ class Scheduler:
                 self._set(n, STATUS_READY)
             dispatches = {n: self._prepare(self.by_num[n]) for n in ready}   # main thread
             with ThreadPoolExecutor(max_workers=len(ready)) as pool:
-                oks = dict(zip(ready, pool.map(lambda n: self._run_agent(dispatches[n]), ready)))
+                results = dict(zip(ready, pool.map(lambda n: self._run_agent(dispatches[n]), ready)))
             for n in ready:  # settle serially in topological order (self.order is sorted)
-                if oks[n] and self._settle(self.by_num[n], dispatches[n]):
+                ok, report_chars = results[n]
+                if ok:
+                    self.ledger.append(n, "meter", {"kind": "report", "chars": report_chars})  # main thread: single-writer
+                if ok and self._settle(self.by_num[n], dispatches[n]):
                     done.add(n)
                 else:
-                    if not oks[n]:
+                    if not ok:
                         self._set(n, STATUS_FAILED)          # agent/report failure: _settle never ran
                     failed_any = True
                     self.aborted = True
